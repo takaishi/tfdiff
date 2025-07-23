@@ -1,0 +1,50 @@
+project_name: my_go_cli_example
+env:
+  - GO111MODULE=on
+before:
+  hooks:
+    - go mod tidy
+builds:
+  - main: ./cmd/my_go_cli_example
+    binary: my_go_cli_example
+    ldflags:
+      - -s -w
+      - -X main.Version={{.Version}}
+      - -X main.Revision={{.ShortCommit}}
+    env:
+      - CGO_ENABLED=0
+    ignore:
+      - goos: windows
+        goarch: 386
+      - goos: darwin
+        goarch: 386
+      - goos: linux
+        goarch: 386
+      - goos: linux
+        goarch: arm
+        goarm: 7
+archives:
+  - id: build
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+    files:
+      - README.md
+    format_overrides:
+      - goos: Windows
+        format: zip
+release:
+  prerelease: auto
+checksum:
+  name_template: 'checksums.txt'
+snapshot:
+  name_template: "{{ .Tag }}-next"
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
