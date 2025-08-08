@@ -96,7 +96,7 @@ func (app *App) outputJSON(result *ComparisonResult) error {
 }
 
 func (app *App) outputText(result *ComparisonResult, config ComparisonConfig) error {
-	output := FormatTextOutput(result, config)
+	output := FormatTextOutput(result, config, app.CLI.NoColor)
 	fmt.Print(output)
 	return nil
 }
