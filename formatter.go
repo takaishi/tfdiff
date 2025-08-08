@@ -2,21 +2,49 @@ package tfdiff
 
 import (
 	"fmt"
+	"os"
 	"sort"
 	"strings"
 )
 
+// ANSI color codes
+const (
+	ColorReset  = "\033[0m"
+	ColorRed    = "\033[31m"
+	ColorGreen  = "\033[32m"
+	ColorYellow = "\033[33m"
+	ColorBlue   = "\033[34m"
+	ColorPurple = "\033[35m"
+	ColorCyan   = "\033[36m"
+	ColorWhite  = "\033[37m"
+	ColorBold   = "\033[1m"
+)
+
+// isTerminal checks if output is going to a terminal
+func isTerminal() bool {
+	fileInfo, _ := os.Stdout.Stat()
+	return (fileInfo.Mode() & os.ModeCharDevice) != 0
+}
+
+// colorize adds color to text if terminal supports it and color is enabled
+func colorize(text, color string, noColor bool) string {
+	if noColor || !isTerminal() {
+		return text
+	}
+	return color + text + ColorReset
+}
+
 // FormatTextOutput formats the comparison result in a unified diff format
-func FormatTextOutput(result *ComparisonResult, config ComparisonConfig) string {
-	return FormatDiffOutput(result, config)
+func FormatTextOutput(result *ComparisonResult, config ComparisonConfig, noColor bool) string {
+	return FormatDiffOutput(result, config, noColor)
 }
 
 // FormatDiffOutput formats the comparison result in a unified diff format
-func FormatDiffOutput(result *ComparisonResult, config ComparisonConfig) string {
+func FormatDiffOutput(result *ComparisonResult, config ComparisonConfig, noColor bool) string {
 	var output strings.Builder
 	
-	output.WriteString(fmt.Sprintf("--- %s\n", result.LeftPath))
-	output.WriteString(fmt.Sprintf("+++ %s\n", result.RightPath))
+	output.WriteString(colorize(fmt.Sprintf("--- %s\n", result.LeftPath), ColorBold+ColorRed, noColor))
+	output.WriteString(colorize(fmt.Sprintf("+++ %s\n", result.RightPath), ColorBold+ColorGreen, noColor))
 	
 	if len(result.Diffs) == 0 {
 		return output.String()
@@ -30,18 +58,26 @@ func FormatDiffOutput(result *ComparisonResult, config ComparisonConfig) string 
 		case DiffTypeRemoved:
 			lines := strings.Split(formatDiffLine(diff, diff.Before, config), "\n")
 			for _, line := range lines {
-				output.WriteString(fmt.Sprintf("-%s\n", line))
+				output.WriteString(colorize(fmt.Sprintf("-%s\n", line), ColorRed, noColor))
 			}
 		case DiffTypeAdded:
 			lines := strings.Split(formatDiffLine(diff, diff.After, config), "\n")
 			for _, line := range lines {
-				output.WriteString(fmt.Sprintf("+%s\n", line))
+				output.WriteString(colorize(fmt.Sprintf("+%s\n", line), ColorGreen, noColor))
 			}
 		case DiffTypeModified:
 			// For modified items, show attribute-level diffs
 			attributeDiffs := formatAttributeDiff(diff, config)
 			for _, line := range attributeDiffs {
-				output.WriteString(line + "\n")
+				coloredLine := line
+				if strings.HasPrefix(line, "-") {
+					coloredLine = colorize(line, ColorRed, noColor)
+				} else if strings.HasPrefix(line, "+") {
+					coloredLine = colorize(line, ColorGreen, noColor)
+				} else {
+					coloredLine = colorize(line, ColorCyan, noColor)
+				}
+				output.WriteString(coloredLine + "\n")
 			}
 		}
 	}

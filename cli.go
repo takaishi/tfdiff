@@ -20,6 +20,7 @@ type CLI struct {
 	Levels        []string     `short:"l" name:"level" help:"comparison levels: module_calls, outputs, resources, data_sources, variables, all" default:"module_calls,outputs,resources,data_sources"`
 	IgnoreArgs    bool         `name:"ignore-args" help:"ignore argument differences" default:"true"`
 	OutputFormat  string       `short:"o" name:"output" help:"output format: text, json" default:"text"`
+	NoColor       bool         `name:"no-color" help:"disable colored output"`
 }
 
 type VersionFlag string
