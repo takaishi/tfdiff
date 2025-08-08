@@ -1,12 +1,12 @@
-project_name: my_go_cli_example
+project_name: tfdiff
 env:
   - GO111MODULE=on
 before:
   hooks:
     - go mod tidy
 builds:
-  - main: ./cmd/my_go_cli_example
-    binary: my_go_cli_example
+  - main: ./cmd/tfdiff
+    binary: tfdiff
     ldflags:
       - -s -w
       - -X main.Version={{.Version}}
