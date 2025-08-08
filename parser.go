@@ -11,6 +11,15 @@ func ParseModule(modulePath string) (*ModuleDefinition, error) {
 	return ParseModuleHCL(modulePath)
 }
 
+// FindTerraformFiles finds all .tf files in the specified directory
+func FindTerraformFiles(path string) ([]string, error) {
+	files, err := filepath.Glob(filepath.Join(path, "*.tf"))
+	if err != nil {
+		return nil, err
+	}
+	return files, nil
+}
+
 // ValidateModuleDirectory validates that a directory exists and contains Terraform files
 func ValidateModuleDirectory(path string) error {
 	// Check if directory exists
@@ -26,7 +35,7 @@ func ValidateModuleDirectory(path string) error {
 	}
 
 	// Check if directory contains .tf files
-	files, err := filepath.Glob(filepath.Join(path, "*.tf"))
+	files, err := FindTerraformFiles(path)
 	if err != nil {
 		return err
 	}

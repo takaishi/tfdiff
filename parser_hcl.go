@@ -27,12 +27,13 @@ func ParseModuleHCL(modulePath string) (*ModuleDefinition, error) {
 		return nil, fmt.Errorf("failed to find .tf files: %w", err)
 	}
 
-	if len(files) == 0 {
-		return nil, fmt.Errorf("no .tf files found in %s", modulePath)
-	}
-
 	def := &ModuleDefinition{
 		Path: modulePath,
+	}
+
+	// If no .tf files found, return empty module definition
+	if len(files) == 0 {
+		return def, nil
 	}
 
 	// Parse each .tf file
@@ -140,7 +141,7 @@ func parseResourceBlock(block *hclsyntax.Block, def *ModuleDefinition, filename 
 		value, err := evaluateExpression(attr.Expr)
 		if err != nil {
 			// If we can't evaluate, store a simplified representation
-			value = fmt.Sprintf("<complex_expression>")
+			value = "<complex_expression>"
 		}
 		resource.Config[name] = value
 	}
@@ -176,7 +177,7 @@ func parseDataBlock(block *hclsyntax.Block, def *ModuleDefinition, filename stri
 	for name, attr := range block.Body.Attributes {
 		value, err := evaluateExpression(attr.Expr)
 		if err != nil {
-			value = fmt.Sprintf("<complex_expression>")
+			value = "<complex_expression>"
 		}
 		dataSource.Config[name] = value
 	}
@@ -199,7 +200,7 @@ func parseOutputBlock(block *hclsyntax.Block, def *ModuleDefinition, filename st
 	for name, attr := range block.Body.Attributes {
 		value, err := evaluateExpression(attr.Expr)
 		if err != nil {
-			value = fmt.Sprintf("<complex_expression>")
+			value = "<complex_expression>"
 		}
 
 		switch name {
@@ -230,7 +231,7 @@ func parseVariableBlock(block *hclsyntax.Block, def *ModuleDefinition, filename 
 	for name, attr := range block.Body.Attributes {
 		value, err := evaluateExpression(attr.Expr)
 		if err != nil {
-			value = fmt.Sprintf("<complex_expression>")
+			value = "<complex_expression>"
 		}
 
 		switch name {

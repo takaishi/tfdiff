@@ -189,7 +189,12 @@ func TestApp_OutputText(t *testing.T) {
 		},
 	}
 
-	err := app.outputText(result)
+	config := ComparisonConfig{
+		Levels:          []ComparisonLevel{ComparisonLevelResources},
+		IgnoreArguments: true,
+	}
+
+	err := app.outputText(result, config)
 	if err != nil {
 		t.Errorf("unexpected error in outputText: %v", err)
 	}
