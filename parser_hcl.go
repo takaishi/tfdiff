@@ -1,6 +1,7 @@
 package tfdiff
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -140,20 +141,29 @@ func parseResourceBlock(block *hclsyntax.Block, def *ModuleDefinition, filename 
 	for name, attr := range block.Body.Attributes {
 		value, err := evaluateExpression(attr.Expr)
 		if err != nil {
-			// If we can't evaluate, store a simplified representation
-			value = "<complex_expression>"
+			// Try to evaluate as HCL expression
+			if val, diags := attr.Expr.Value(nil); !diags.HasErrors() {
+				jsonStr, err := convertCtyToJSON(val)
+				if err == nil {
+					value = jsonStr
+				} else {
+					value = "<complex_expression>"
+				}
+			} else {
+				value = "<complex_expression>"
+			}
 		}
 		resource.Config[name] = value
 	}
 
-	// Parse nested blocks (like tags, ingress, etc.)
+	// For nested blocks, we'll just mark them as complex expressions
+	// This branch focuses only on JSON object support for attributes
 	for _, nestedBlock := range block.Body.Blocks {
 		blockKey := nestedBlock.Type
 		if len(nestedBlock.Labels) > 0 {
 			blockKey = fmt.Sprintf("%s.%s", nestedBlock.Type, strings.Join(nestedBlock.Labels, "."))
 		}
-		
-		// Serialize nested block to string representation
+
 		resource.Config[blockKey] = fmt.Sprintf("<%s_block>", nestedBlock.Type)
 	}
 
@@ -279,4 +289,91 @@ func evaluateExpression(expr hcl.Expression) (string, error) {
 
 	// For complex expressions, return an error so caller can handle
 	return "", fmt.Errorf("complex expression cannot be evaluated")
+}
+
+// convertCtyToJSON converts a cty.Value to JSON string
+func convertCtyToJSON(val cty.Value) (string, error) {
+	if val.IsNull() {
+		return "null", nil
+	}
+
+	switch {
+	case val.Type() == cty.String:
+		return val.AsString(), nil
+	case val.Type() == cty.Number:
+		f, _ := val.AsBigFloat().Float64()
+		return fmt.Sprintf("%g", f), nil
+	case val.Type() == cty.Bool:
+		if val.True() {
+			return "true", nil
+		}
+		return "false", nil
+	case val.Type().IsObjectType() || val.Type().IsMapType():
+		result := make(map[string]interface{})
+		valMap := val.AsValueMap()
+		for k, v := range valMap {
+			converted, err := convertCtyValue(v)
+			if err != nil {
+				return "", err
+			}
+			result[k] = converted
+		}
+		jsonBytes, err := json.Marshal(result)
+		return string(jsonBytes), err
+	case val.Type().IsListType() || val.Type().IsTupleType():
+		var result []interface{}
+		valSlice := val.AsValueSlice()
+		for _, v := range valSlice {
+			converted, err := convertCtyValue(v)
+			if err != nil {
+				return "", err
+			}
+			result = append(result, converted)
+		}
+		jsonBytes, err := json.Marshal(result)
+		return string(jsonBytes), err
+	default:
+		return "", fmt.Errorf("unsupported cty type: %s", val.Type().FriendlyName())
+	}
+}
+
+// convertCtyValue converts a cty.Value to a Go value
+func convertCtyValue(val cty.Value) (interface{}, error) {
+	if val.IsNull() {
+		return nil, nil
+	}
+
+	switch {
+	case val.Type() == cty.String:
+		return val.AsString(), nil
+	case val.Type() == cty.Number:
+		f, _ := val.AsBigFloat().Float64()
+		return f, nil
+	case val.Type() == cty.Bool:
+		return val.True(), nil
+	case val.Type().IsObjectType() || val.Type().IsMapType():
+		result := make(map[string]interface{})
+		valMap := val.AsValueMap()
+		for k, v := range valMap {
+			converted, err := convertCtyValue(v)
+			if err != nil {
+				return nil, err
+			}
+			result[k] = converted
+		}
+		return result, nil
+	case val.Type().IsListType() || val.Type().IsTupleType():
+		var result []interface{}
+		valSlice := val.AsValueSlice()
+		for _, v := range valSlice {
+			converted, err := convertCtyValue(v)
+			if err != nil {
+				return nil, err
+			}
+			result = append(result, converted)
+		}
+		return result, nil
+	default:
+		return nil, fmt.Errorf("unsupported cty type: %s", val.Type().FriendlyName())
+	}
 }

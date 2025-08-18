@@ -3,10 +3,13 @@ resource "aws_instance" "web" {
   ami           = "ami-0c02fb55956c7d316"
   instance_type = "t3.small" # Changed from t2.micro
 
+  # JSON object with different key ordering, but Team and Project are the same
   tags = {
-    Name        = "WebServer"
-    Environment = "staging" # Changed from production
-    Owner       = "DevOps"  # Added new tag
+    Project     = "web-app"   # Different ordering
+    Environment = "staging"   # Changed from production
+    Name        = "WebServer" # Different ordering
+    Team        = "backend"   # Different ordering
+    Owner       = "DevOps"    # Added new tag
   }
 }
 

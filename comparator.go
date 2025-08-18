@@ -1,6 +1,7 @@
 package tfdiff
 
 import (
+	"encoding/json"
 	"fmt"
 	"reflect"
 	"sort"
@@ -395,11 +396,57 @@ func resourcesEqual(left, right Resource, config ComparisonConfig) bool {
 		return false
 	}
 
-	if !config.IgnoreArguments && !reflect.DeepEqual(left.Config, right.Config) {
+	if !config.IgnoreArguments && !configsEqual(left.Config, right.Config) {
 		return false
 	}
 
 	return true
+}
+
+// configsEqual compares two config maps, treating JSON strings semantically
+func configsEqual(left, right map[string]string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+
+	for key, leftValue := range left {
+		rightValue, exists := right[key]
+		if !exists {
+			return false
+		}
+
+		// Try to parse as JSON for semantic comparison
+		if isJSON(leftValue) && isJSON(rightValue) {
+			if !jsonEqual(leftValue, rightValue) {
+				return false
+			}
+		} else if leftValue != rightValue {
+			return false
+		}
+	}
+
+	return true
+}
+
+// isJSON checks if a string is valid JSON
+func isJSON(str string) bool {
+	var js json.RawMessage
+	return json.Unmarshal([]byte(str), &js) == nil
+}
+
+// jsonEqual compares two JSON strings semantically
+func jsonEqual(a, b string) bool {
+	var aData, bData interface{}
+	
+	if err := json.Unmarshal([]byte(a), &aData); err != nil {
+		return false
+	}
+	
+	if err := json.Unmarshal([]byte(b), &bData); err != nil {
+		return false
+	}
+	
+	return reflect.DeepEqual(aData, bData)
 }
 
 func dataSourcesEqual(left, right DataSource, config ComparisonConfig) bool {
@@ -407,7 +454,7 @@ func dataSourcesEqual(left, right DataSource, config ComparisonConfig) bool {
 		return false
 	}
 
-	if !config.IgnoreArguments && !reflect.DeepEqual(left.Config, right.Config) {
+	if !config.IgnoreArguments && !configsEqual(left.Config, right.Config) {
 		return false
 	}
 
