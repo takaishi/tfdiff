@@ -1,13 +1,13 @@
 variable "instance_type" {
   description = "Type of EC2 instance to launch"
   type        = string
-  default     = "t3.small"  # Changed default from t2.micro
+  default     = "t3.small" # Changed default from t2.micro
 }
 
 variable "environment" {
   description = "Environment name"
   type        = string
-  default     = "staging"  # Changed from production
+  default     = "staging" # Changed from production
 }
 
 # bucket_name variable removed
