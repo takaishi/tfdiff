@@ -6,6 +6,8 @@ resource "aws_instance" "web" {
   tags = {
     Name        = "WebServer"
     Environment = "production"
+    Team        = "backend"
+    Project     = "web-app"
   }
 }
 
@@ -44,6 +46,8 @@ resource "aws_s3_bucket" "logs" {
   tags = {
     Name        = "LogsBucket"
     Environment = "production"
+    Team        = "devops"
+    Compliance  = "HIPAA"
   }
 }
 

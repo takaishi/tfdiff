@@ -1,6 +1,7 @@
 package tfdiff
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -260,5 +261,69 @@ variable "instance_type" {
 				tt.check(t, module)
 			}
 		})
+	}
+}
+
+func TestParseHCLResourceWithTags(t *testing.T) {
+	tmpDir := t.TempDir()
+	
+	// Create test Terraform file
+	tfContent := `
+resource "aws_instance" "test" {
+  ami           = "ami-12345"
+  instance_type = "t2.micro"
+  
+  tags = {
+    Name        = "TestServer"
+    Environment = "production"
+    Team        = "backend"
+  }
+}
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "main.tf"), []byte(tfContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+	
+	// Execute parsing
+	module, err := ParseModuleHCL(tmpDir)
+	if err != nil {
+		t.Fatalf("Failed to parse module: %v", err)
+	}
+	
+	// Verify there is 1 resource
+	if len(module.Resources) != 1 {
+		t.Fatalf("Expected 1 resource, got %d", len(module.Resources))
+	}
+	
+	resource := module.Resources[0]
+	
+	// Verify tags are stored as JSON
+	tagsValue, exists := resource.Config["tags"]
+	if !exists {
+		t.Fatal("tags not found in resource config")
+	}
+	
+	t.Logf("Tags value: %s", tagsValue)
+	
+	// Verify it can be parsed as JSON
+	var tags map[string]interface{}
+	if err := json.Unmarshal([]byte(tagsValue), &tags); err != nil {
+		// Case when it's <complex_expression>
+		if tagsValue == "<complex_expression>" {
+			t.Errorf("Tags were not parsed as JSON, got: %s", tagsValue)
+		} else {
+			t.Errorf("Failed to parse tags as JSON: %v", err)
+		}
+	} else {
+		// Verification when JSON is correctly parsed
+		if tags["Name"] != "TestServer" {
+			t.Errorf("Expected Name=TestServer, got %v", tags["Name"])
+		}
+		if tags["Environment"] != "production" {
+			t.Errorf("Expected Environment=production, got %v", tags["Environment"])
+		}
+		if tags["Team"] != "backend" {
+			t.Errorf("Expected Team=backend, got %v", tags["Team"])
+		}
 	}
 }
