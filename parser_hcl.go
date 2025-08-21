@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/hclparse"
@@ -133,7 +132,7 @@ func parseResourceBlock(block *hclsyntax.Block, def *ModuleDefinition, filename 
 	resource := Resource{
 		Type:     block.Labels[0],
 		Name:     block.Labels[1],
-		Config:   make(map[string]string),
+		Config:   make(map[string]interface{}),
 		Position: fmt.Sprintf("%s:%d", filepath.Base(filename), block.DefRange().Start.Line),
 	}
 
@@ -156,15 +155,78 @@ func parseResourceBlock(block *hclsyntax.Block, def *ModuleDefinition, filename 
 		resource.Config[name] = value
 	}
 
-	// For nested blocks, we'll just mark them as complex expressions
-	// This branch focuses only on JSON object support for attributes
+	// Parse nested blocks
+	nestedBlocks := make(map[string][]map[string]interface{})
 	for _, nestedBlock := range block.Body.Blocks {
-		blockKey := nestedBlock.Type
-		if len(nestedBlock.Labels) > 0 {
-			blockKey = fmt.Sprintf("%s.%s", nestedBlock.Type, strings.Join(nestedBlock.Labels, "."))
+		blockType := nestedBlock.Type
+		
+		// Parse nested block content
+		blockContent := make(map[string]interface{})
+		
+		// Parse attributes in nested block
+		for name, attr := range nestedBlock.Body.Attributes {
+			value, err := evaluateExpression(attr.Expr)
+			if err != nil {
+				if val, diags := attr.Expr.Value(nil); !diags.HasErrors() {
+					jsonStr, err := convertCtyToJSON(val)
+					if err == nil {
+						value = jsonStr
+					} else {
+						value = "<complex_expression>"
+					}
+				} else {
+					value = "<complex_expression>"
+				}
+			}
+			blockContent[name] = value
 		}
-
-		resource.Config[blockKey] = fmt.Sprintf("<%s_block>", nestedBlock.Type)
+		
+		// Handle labels as identifiers for the block
+		if len(nestedBlock.Labels) > 0 {
+			blockContent["_labels"] = nestedBlock.Labels
+		}
+		
+		// Handle nested blocks within nested blocks (recursively)
+		if len(nestedBlock.Body.Blocks) > 0 {
+			innerBlocks := make(map[string][]map[string]interface{})
+			for _, innerBlock := range nestedBlock.Body.Blocks {
+				innerBlockType := innerBlock.Type
+				innerBlockContent := make(map[string]interface{})
+				
+				for name, attr := range innerBlock.Body.Attributes {
+					value, err := evaluateExpression(attr.Expr)
+					if err != nil {
+						if val, diags := attr.Expr.Value(nil); !diags.HasErrors() {
+							jsonStr, err := convertCtyToJSON(val)
+							if err == nil {
+								value = jsonStr
+							} else {
+								value = "<complex_expression>"
+							}
+						} else {
+							value = "<complex_expression>"
+						}
+					}
+					innerBlockContent[name] = value
+				}
+				
+				if len(innerBlock.Labels) > 0 {
+					innerBlockContent["_labels"] = innerBlock.Labels
+				}
+				
+				innerBlocks[innerBlockType] = append(innerBlocks[innerBlockType], innerBlockContent)
+			}
+			if len(innerBlocks) > 0 {
+				blockContent["_blocks"] = innerBlocks
+			}
+		}
+		
+		nestedBlocks[blockType] = append(nestedBlocks[blockType], blockContent)
+	}
+	
+	// Add nested blocks to config if any exist
+	if len(nestedBlocks) > 0 {
+		resource.Config["_blocks"] = nestedBlocks
 	}
 
 	def.Resources = append(def.Resources, resource)
@@ -179,7 +241,7 @@ func parseDataBlock(block *hclsyntax.Block, def *ModuleDefinition, filename stri
 	dataSource := DataSource{
 		Type:     block.Labels[0],
 		Name:     block.Labels[1],
-		Config:   make(map[string]string),
+		Config:   make(map[string]interface{}),
 		Position: fmt.Sprintf("%s:%d", filepath.Base(filename), block.DefRange().Start.Line),
 	}
 
@@ -187,9 +249,53 @@ func parseDataBlock(block *hclsyntax.Block, def *ModuleDefinition, filename stri
 	for name, attr := range block.Body.Attributes {
 		value, err := evaluateExpression(attr.Expr)
 		if err != nil {
-			value = "<complex_expression>"
+			if val, diags := attr.Expr.Value(nil); !diags.HasErrors() {
+				jsonStr, err := convertCtyToJSON(val)
+				if err == nil {
+					value = jsonStr
+				} else {
+					value = "<complex_expression>"
+				}
+			} else {
+				value = "<complex_expression>"
+			}
 		}
 		dataSource.Config[name] = value
+	}
+
+	// Parse nested blocks
+	nestedBlocks := make(map[string][]map[string]interface{})
+	for _, nestedBlock := range block.Body.Blocks {
+		blockType := nestedBlock.Type
+		
+		blockContent := make(map[string]interface{})
+		
+		for name, attr := range nestedBlock.Body.Attributes {
+			value, err := evaluateExpression(attr.Expr)
+			if err != nil {
+				if val, diags := attr.Expr.Value(nil); !diags.HasErrors() {
+					jsonStr, err := convertCtyToJSON(val)
+					if err == nil {
+						value = jsonStr
+					} else {
+						value = "<complex_expression>"
+					}
+				} else {
+					value = "<complex_expression>"
+				}
+			}
+			blockContent[name] = value
+		}
+		
+		if len(nestedBlock.Labels) > 0 {
+			blockContent["_labels"] = nestedBlock.Labels
+		}
+		
+		nestedBlocks[blockType] = append(nestedBlocks[blockType], blockContent)
+	}
+	
+	if len(nestedBlocks) > 0 {
+		dataSource.Config["_blocks"] = nestedBlocks
 	}
 
 	def.DataSources = append(def.DataSources, dataSource)

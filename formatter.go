@@ -1,8 +1,10 @@
 package tfdiff
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
+	"reflect"
 	"sort"
 	"strings"
 )
@@ -134,8 +136,8 @@ func formatDiffLine(diff Diff, item interface{}, config ComparisonConfig) string
 			lines := []string{fmt.Sprintf("resource \"%s\" \"%s\" {", res.Type, res.Name)}
 			if !config.IgnoreArguments && len(res.Config) > 0 {
 				for key, value := range res.Config {
-					if value != "" && value != "<complex_expression>" && !strings.HasPrefix(value, "<") {
-						lines = append(lines, fmt.Sprintf("  %s = \"%s\"", key, value))
+					if strValue, ok := value.(string); ok && strValue != "" && strValue != "<complex_expression>" && !strings.HasPrefix(strValue, "<") {
+						lines = append(lines, fmt.Sprintf("  %s = \"%s\"", key, strValue))
 					}
 				}
 			}
@@ -147,8 +149,8 @@ func formatDiffLine(diff Diff, item interface{}, config ComparisonConfig) string
 			lines := []string{fmt.Sprintf("data \"%s\" \"%s\" {", ds.Type, ds.Name)}
 			if !config.IgnoreArguments && len(ds.Config) > 0 {
 				for key, value := range ds.Config {
-					if value != "" && value != "<complex_expression>" && !strings.HasPrefix(value, "<") {
-						lines = append(lines, fmt.Sprintf("  %s = \"%s\"", key, value))
+					if strValue, ok := value.(string); ok && strValue != "" && strValue != "<complex_expression>" && !strings.HasPrefix(strValue, "<") {
+						lines = append(lines, fmt.Sprintf("  %s = \"%s\"", key, strValue))
 					}
 				}
 			}
@@ -209,7 +211,7 @@ func formatAttributeDiff(diff Diff, config ComparisonConfig) []string {
 				
 				// Compare config if not ignoring arguments
 				if !config.IgnoreArguments {
-					lines = append(lines, compareMapAttributes(before.Config, after.Config)...)
+					lines = append(lines, compareInterfaceMapAttributes(before.Config, after.Config)...)
 				}
 				
 				lines = append(lines, " }")
@@ -222,7 +224,7 @@ func formatAttributeDiff(diff Diff, config ComparisonConfig) []string {
 				
 				// Compare config if not ignoring arguments
 				if !config.IgnoreArguments {
-					lines = append(lines, compareMapAttributes(before.Config, after.Config)...)
+					lines = append(lines, compareInterfaceMapAttributes(before.Config, after.Config)...)
 				}
 				
 				lines = append(lines, " }")
@@ -293,6 +295,224 @@ func formatAttributeDiff(diff Diff, config ComparisonConfig) []string {
 	}
 	
 	return lines
+}
+
+// compareInterfaceMapAttributes compares two interface maps and returns diff lines
+func compareInterfaceMapAttributes(before, after map[string]interface{}) []string {
+	var lines []string
+	
+	// Get all keys from both maps
+	allKeys := make(map[string]bool)
+	for key := range before {
+		allKeys[key] = true
+	}
+	for key := range after {
+		allKeys[key] = true
+	}
+	
+	// Sort keys for consistent output
+	var sortedKeys []string
+	for key := range allKeys {
+		sortedKeys = append(sortedKeys, key)
+	}
+	sort.Strings(sortedKeys)
+	
+	// Compare each key
+	for _, key := range sortedKeys {
+		beforeVal, beforeExists := before[key]
+		afterVal, afterExists := after[key]
+		
+		// Handle _blocks specially for nested blocks comparison
+		if key == "_blocks" {
+			blockLines := compareNestedBlocks(beforeVal, afterVal)
+			lines = append(lines, blockLines...)
+			continue
+		}
+		
+		// Convert to string for display, skipping complex expressions
+		var beforeStr, afterStr string
+		beforeStr = interfaceToDisplayString(beforeVal)
+		afterStr = interfaceToDisplayString(afterVal)
+		
+		// Skip complex expressions and empty values
+		if (beforeExists && (beforeStr == "" || beforeStr == "<complex_expression>" || strings.HasPrefix(beforeStr, "<"))) &&
+		   (afterExists && (afterStr == "" || afterStr == "<complex_expression>" || strings.HasPrefix(afterStr, "<"))) {
+			continue
+		}
+		
+		if !beforeExists && afterExists {
+			if afterStr != "" && afterStr != "<complex_expression>" && !strings.HasPrefix(afterStr, "<") {
+				lines = append(lines, fmt.Sprintf("  + %s = \"%s\"", key, afterStr))
+			}
+		} else if beforeExists && !afterExists {
+			if beforeStr != "" && beforeStr != "<complex_expression>" && !strings.HasPrefix(beforeStr, "<") {
+				lines = append(lines, fmt.Sprintf("  - %s = \"%s\"", key, beforeStr))
+			}
+		} else if beforeExists && afterExists && beforeStr != afterStr {
+			if (beforeStr != "" && beforeStr != "<complex_expression>" && !strings.HasPrefix(beforeStr, "<")) ||
+			   (afterStr != "" && afterStr != "<complex_expression>" && !strings.HasPrefix(afterStr, "<")) {
+				lines = append(lines, fmt.Sprintf("  - %s = \"%s\"", key, beforeStr))
+				lines = append(lines, fmt.Sprintf("  + %s = \"%s\"", key, afterStr))
+			}
+		}
+	}
+	
+	return lines
+}
+
+// compareNestedBlocks compares nested blocks (like ingress/egress) and returns diff lines
+func compareNestedBlocks(beforeVal, afterVal interface{}) []string {
+	var lines []string
+	
+	// Convert to map[string][]map[string]interface{} if possible
+	beforeBlocks, beforeOk := beforeVal.(map[string][]map[string]interface{})
+	afterBlocks, afterOk := afterVal.(map[string][]map[string]interface{})
+	
+	// If either is nil or not the expected type, handle accordingly
+	if !beforeOk && !afterOk {
+		return lines
+	}
+	
+	if !beforeOk {
+		beforeBlocks = make(map[string][]map[string]interface{})
+	}
+	if !afterOk {
+		afterBlocks = make(map[string][]map[string]interface{})
+	}
+	
+	// Get all block types
+	blockTypes := make(map[string]bool)
+	for blockType := range beforeBlocks {
+		blockTypes[blockType] = true
+	}
+	for blockType := range afterBlocks {
+		blockTypes[blockType] = true
+	}
+	
+	// Sort block types for consistent output
+	var sortedBlockTypes []string
+	for blockType := range blockTypes {
+		sortedBlockTypes = append(sortedBlockTypes, blockType)
+	}
+	sort.Strings(sortedBlockTypes)
+	
+	// Compare each block type
+	for _, blockType := range sortedBlockTypes {
+		beforeList := beforeBlocks[blockType]
+		afterList := afterBlocks[blockType]
+		
+		// Find which blocks were added, removed, or are common
+		matched := make([]bool, len(afterList))
+		
+		// First pass: find exact matches and removals
+		for _, beforeBlock := range beforeList {
+			found := false
+			for j, afterBlock := range afterList {
+				if !matched[j] && blocksEqual(beforeBlock, afterBlock) {
+					matched[j] = true
+					found = true
+					break
+				}
+			}
+			
+			if !found {
+				// Block was removed
+				lines = append(lines, formatNestedBlockDiff(blockType, beforeBlock, "-")...)
+			}
+		}
+		
+		// Second pass: find additions
+		for j, afterBlock := range afterList {
+			if !matched[j] {
+				// Block was added
+				lines = append(lines, formatNestedBlockDiff(blockType, afterBlock, "+")...)
+			}
+		}
+	}
+	
+	return lines
+}
+
+// blocksEqual checks if two blocks are equal
+func blocksEqual(a, b map[string]interface{}) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	
+	for key, aVal := range a {
+		bVal, exists := b[key]
+		if !exists {
+			return false
+		}
+		
+		// Handle different types of values
+		switch aTyped := aVal.(type) {
+		case string:
+			bTyped, ok := bVal.(string)
+			if !ok || aTyped != bTyped {
+				return false
+			}
+		case []interface{}:
+			bTyped, ok := bVal.([]interface{})
+			if !ok || !reflect.DeepEqual(aTyped, bTyped) {
+				return false
+			}
+		default:
+			if !reflect.DeepEqual(aVal, bVal) {
+				return false
+			}
+		}
+	}
+	
+	return true
+}
+
+// formatNestedBlockDiff formats a nested block for diff output
+func formatNestedBlockDiff(blockType string, block map[string]interface{}, prefix string) []string {
+	var lines []string
+	
+	// Start the block
+	lines = append(lines, fmt.Sprintf("%s %s {", prefix, blockType))
+	
+	// Sort keys for consistent output
+	var keys []string
+	for key := range block {
+		// Skip internal keys
+		if strings.HasPrefix(key, "_") {
+			continue
+		}
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	
+	// Format each attribute
+	for _, key := range keys {
+		value := block[key]
+		valueStr := interfaceToDisplayString(value)
+		if valueStr != "" && valueStr != "<complex_expression>" {
+			lines = append(lines, fmt.Sprintf("%s   %s = \"%s\"", prefix, key, valueStr))
+		}
+	}
+	
+	// End the block
+	lines = append(lines, fmt.Sprintf("%s }", prefix))
+	
+	return lines
+}
+
+// interfaceToDisplayString converts interface{} to string for display purposes
+func interfaceToDisplayString(value interface{}) string {
+	if value == nil {
+		return ""
+	}
+	if str, ok := value.(string); ok {
+		return str
+	}
+	// For non-string values, convert to JSON or mark as complex
+	if jsonBytes, err := json.Marshal(value); err == nil {
+		return string(jsonBytes)
+	}
+	return "<complex_expression>"
 }
 
 // compareMapAttributes compares two string maps and returns diff lines

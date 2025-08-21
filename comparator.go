@@ -403,8 +403,8 @@ func resourcesEqual(left, right Resource, config ComparisonConfig) bool {
 	return true
 }
 
-// configsEqual compares two config maps, treating JSON strings semantically
-func configsEqual(left, right map[string]string) bool {
+// configsEqual compares two config maps, handling nested blocks and JSON strings semantically
+func configsEqual(left, right map[string]interface{}) bool {
 	if len(left) != len(right) {
 		return false
 	}
@@ -415,16 +415,91 @@ func configsEqual(left, right map[string]string) bool {
 			return false
 		}
 
-		// Try to parse as JSON for semantic comparison
-		if isJSON(leftValue) && isJSON(rightValue) {
-			if !jsonEqual(leftValue, rightValue) {
-				return false
-			}
-		} else if leftValue != rightValue {
+		if !valuesEqual(leftValue, rightValue) {
 			return false
 		}
 	}
 
+	return true
+}
+
+// valuesEqual compares two interface{} values recursively
+func valuesEqual(left, right interface{}) bool {
+	switch leftVal := left.(type) {
+	case string:
+		rightVal, ok := right.(string)
+		if !ok {
+			return false
+		}
+		// Try to parse as JSON for semantic comparison
+		if isJSON(leftVal) && isJSON(rightVal) {
+			return jsonEqual(leftVal, rightVal)
+		}
+		return leftVal == rightVal
+		
+	case map[string]interface{}:
+		rightVal, ok := right.(map[string]interface{})
+		if !ok {
+			return false
+		}
+		return configsEqual(leftVal, rightVal)
+		
+	case []map[string]interface{}:
+		rightVal, ok := right.([]map[string]interface{})
+		if !ok {
+			return false
+		}
+		if len(leftVal) != len(rightVal) {
+			return false
+		}
+		// For nested blocks, we need to compare them in a way that's order-independent
+		// for blocks that can be reordered (like security group rules)
+		return sliceMapsEqual(leftVal, rightVal)
+		
+	case []interface{}:
+		rightVal, ok := right.([]interface{})
+		if !ok {
+			return false
+		}
+		if len(leftVal) != len(rightVal) {
+			return false
+		}
+		for i, leftItem := range leftVal {
+			if !valuesEqual(leftItem, rightVal[i]) {
+				return false
+			}
+		}
+		return true
+		
+	default:
+		// For other types, use reflection for deep comparison to avoid panic
+		return reflect.DeepEqual(left, right)
+	}
+}
+
+// sliceMapsEqual compares two slices of maps, handling order-independent comparison
+func sliceMapsEqual(left, right []map[string]interface{}) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	
+	// For blocks like ingress/egress that can be reordered, we need to find matching pairs
+	matched := make([]bool, len(right))
+	
+	for _, leftItem := range left {
+		found := false
+		for j, rightItem := range right {
+			if !matched[j] && configsEqual(leftItem, rightItem) {
+				matched[j] = true
+				found = true
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+	
 	return true
 }
 

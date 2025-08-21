@@ -307,12 +307,17 @@ resource "aws_instance" "test" {
 	
 	// Verify it can be parsed as JSON
 	var tags map[string]interface{}
-	if err := json.Unmarshal([]byte(tagsValue), &tags); err != nil {
+	tagsStr, ok := tagsValue.(string)
+	if !ok {
+		t.Errorf("Expected tags value to be string, got %T", tagsValue)
+		return
+	}
+	if err := json.Unmarshal([]byte(tagsStr), &tags); err != nil {
 		// Case when it's <complex_expression>
-		if tagsValue == "<complex_expression>" {
-			t.Errorf("Tags were not parsed as JSON, got: %s", tagsValue)
+		if tagsStr == "<complex_expression>" {
+			t.Errorf("Tags were not parsed as JSON, got: %s", tagsStr)
 		} else {
-			t.Errorf("Failed to parse tags as JSON: %v", err)
+			t.Errorf("Failed to parse tags as JSON: %v, value: %s", err, tagsStr)
 		}
 	} else {
 		// Verification when JSON is correctly parsed

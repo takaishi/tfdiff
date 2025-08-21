@@ -5,6 +5,15 @@ import (
 	"testing"
 )
 
+// stringMapToInterface converts map[string]string to map[string]interface{}
+func stringMapToInterface(m map[string]string) map[string]interface{} {
+	result := make(map[string]interface{})
+	for k, v := range m {
+		result[k] = v
+	}
+	return result
+}
+
 func TestResourcesEqual_WithNestedObjects(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -18,20 +27,20 @@ func TestResourcesEqual_WithNestedObjects(t *testing.T) {
 			left: Resource{
 				Type: "aws_instance",
 				Name: "example",
-				Config: map[string]string{
+				Config: stringMapToInterface(map[string]string{
 					"ami":           "ami-12345",
 					"instance_type": "t2.micro",
 					"tags":          `{"Name": "test", "Environment": "dev"}`,
-				},
+				}),
 			},
 			right: Resource{
 				Type: "aws_instance",
 				Name: "example",
-				Config: map[string]string{
+				Config: stringMapToInterface(map[string]string{
 					"ami":           "ami-12345",
 					"instance_type": "t2.micro",
 					"tags":          `{"Name": "test", "Environment": "dev"}`,
-				},
+				}),
 			},
 			config:   ComparisonConfig{IgnoreArguments: false},
 			expected: true,
@@ -41,16 +50,16 @@ func TestResourcesEqual_WithNestedObjects(t *testing.T) {
 			left: Resource{
 				Type: "aws_instance",
 				Name: "example",
-				Config: map[string]string{
+				Config: stringMapToInterface(map[string]string{
 					"tags": `{"Environment": "dev", "Name": "test"}`,
-				},
+				}),
 			},
 			right: Resource{
 				Type: "aws_instance",
 				Name: "example",
-				Config: map[string]string{
+				Config: stringMapToInterface(map[string]string{
 					"tags": `{"Name": "test", "Environment": "dev"}`,
-				},
+				}),
 			},
 			config:   ComparisonConfig{IgnoreArguments: false},
 			expected: true, // Should be true as JSON content is the same
@@ -60,16 +69,16 @@ func TestResourcesEqual_WithNestedObjects(t *testing.T) {
 			left: Resource{
 				Type: "aws_instance",
 				Name: "example",
-				Config: map[string]string{
+				Config: stringMapToInterface(map[string]string{
 					"tags": `{"Name": "test", "Environment": "dev"}`,
-				},
+				}),
 			},
 			right: Resource{
 				Type: "aws_instance",
 				Name: "example",
-				Config: map[string]string{
+				Config: stringMapToInterface(map[string]string{
 					"tags": `{"Name": "test", "Environment": "prod"}`,
-				},
+				}),
 			},
 			config:   ComparisonConfig{IgnoreArguments: false},
 			expected: false,
@@ -79,16 +88,16 @@ func TestResourcesEqual_WithNestedObjects(t *testing.T) {
 			left: Resource{
 				Type: "aws_security_group",
 				Name: "example",
-				Config: map[string]string{
+				Config: stringMapToInterface(map[string]string{
 					"ingress": `[{"from_port": 80, "to_port": 80, "protocol": "tcp", "cidr_blocks": ["0.0.0.0/0"]}]`,
-				},
+				}),
 			},
 			right: Resource{
 				Type: "aws_security_group",
 				Name: "example",
-				Config: map[string]string{
+				Config: stringMapToInterface(map[string]string{
 					"ingress": `[{"protocol": "tcp", "from_port": 80, "to_port": 80, "cidr_blocks": ["0.0.0.0/0"]}]`,
-				},
+				}),
 			},
 			config:   ComparisonConfig{IgnoreArguments: false},
 			expected: true, // Should be true if content is same even if object order in array differs
@@ -98,16 +107,16 @@ func TestResourcesEqual_WithNestedObjects(t *testing.T) {
 			left: Resource{
 				Type: "aws_instance",
 				Name: "example",
-				Config: map[string]string{
+				Config: stringMapToInterface(map[string]string{
 					"tags": `{"Name": "test1"}`,
-				},
+				}),
 			},
 			right: Resource{
 				Type: "aws_instance",
 				Name: "example",
-				Config: map[string]string{
+				Config: stringMapToInterface(map[string]string{
 					"tags": `{"Name": "test2"}`,
-				},
+				}),
 			},
 			config:   ComparisonConfig{IgnoreArguments: true},
 			expected: true,
@@ -131,10 +140,10 @@ func TestCompareResources_WithNestedObjects(t *testing.T) {
 		{
 			Type: "aws_instance",
 			Name: "web",
-			Config: map[string]string{
+			Config: stringMapToInterface(map[string]string{
 				"ami":  "ami-12345",
 				"tags": `{"Name": "web-server", "Environment": "prod"}`,
-			},
+			}),
 		},
 	}
 
@@ -142,10 +151,10 @@ func TestCompareResources_WithNestedObjects(t *testing.T) {
 		{
 			Type: "aws_instance",
 			Name: "web",
-			Config: map[string]string{
+			Config: stringMapToInterface(map[string]string{
 				"ami":  "ami-12345",
 				"tags": `{"Environment": "prod", "Name": "web-server"}`, // Different ordering
-			},
+			}),
 		},
 	}
 
