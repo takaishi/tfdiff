@@ -1,5 +1,8 @@
 # Changelog
 
+## [v0.0.4](https://github.com/takaishi/tfdiff/compare/v0.0.3...v0.0.4) - 2025-08-24
+- chore: add FUNDING.yml by @takaishi in https://github.com/takaishi/tfdiff/pull/20
+
 ## [v0.0.3](https://github.com/takaishi/tfdiff/compare/v0.0.2...v0.0.3) - 2025-08-24
 - chore: format .tf files by @takaishi in https://github.com/takaishi/tfdiff/pull/8
 - feat: support comparing JSON object by @takaishi in https://github.com/takaishi/tfdiff/pull/7
