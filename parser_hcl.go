@@ -124,6 +124,60 @@ func parseModuleBlock(block *hclsyntax.Block, def *ModuleDefinition, filename st
 	return nil
 }
 
+// evaluateAttributeValue evaluates an HCL attribute expression and returns its value
+// It handles complex expressions, including JSON conversion when needed
+func evaluateAttributeValue(attr *hclsyntax.Attribute) interface{} {
+	value, err := evaluateExpression(attr.Expr)
+	if err != nil {
+		if val, diags := attr.Expr.Value(nil); !diags.HasErrors() {
+			if jsonStr, err := convertCtyToJSON(val); err == nil {
+				return jsonStr
+			}
+		}
+		return "<complex_expression>"
+	}
+	return value
+}
+
+// parseBlockAttributes parses attributes from an HCL block body
+func parseBlockAttributes(body *hclsyntax.Body) map[string]interface{} {
+	config := make(map[string]interface{})
+	
+	// Parse attributes
+	for name, attr := range body.Attributes {
+		config[name] = evaluateAttributeValue(attr)
+	}
+	
+	return config
+}
+
+// parseNestedBlocks recursively parses nested blocks from an HCL block body
+func parseNestedBlocks(body *hclsyntax.Body, maxDepth int) map[string][]map[string]interface{} {
+	if maxDepth <= 0 || len(body.Blocks) == 0 {
+		return nil
+	}
+	
+	nestedBlocks := make(map[string][]map[string]interface{})
+	
+	for _, nestedBlock := range body.Blocks {
+		blockContent := parseBlockAttributes(nestedBlock.Body)
+		
+		// Handle labels as identifiers for the block
+		if len(nestedBlock.Labels) > 0 {
+			blockContent["_labels"] = nestedBlock.Labels
+		}
+		
+		// Handle nested blocks within nested blocks (recursively)
+		if innerBlocks := parseNestedBlocks(nestedBlock.Body, maxDepth-1); innerBlocks != nil {
+			blockContent["_blocks"] = innerBlocks
+		}
+		
+		nestedBlocks[nestedBlock.Type] = append(nestedBlocks[nestedBlock.Type], blockContent)
+	}
+	
+	return nestedBlocks
+}
+
 func parseResourceBlock(block *hclsyntax.Block, def *ModuleDefinition, filename string) error {
 	if len(block.Labels) != 2 {
 		return fmt.Errorf("resource block must have exactly two labels")
@@ -136,96 +190,13 @@ func parseResourceBlock(block *hclsyntax.Block, def *ModuleDefinition, filename 
 		Position: fmt.Sprintf("%s:%d", filepath.Base(filename), block.DefRange().Start.Line),
 	}
 
-	// Parse attributes
-	for name, attr := range block.Body.Attributes {
-		value, err := evaluateExpression(attr.Expr)
-		if err != nil {
-			// Try to evaluate as HCL expression
-			if val, diags := attr.Expr.Value(nil); !diags.HasErrors() {
-				jsonStr, err := convertCtyToJSON(val)
-				if err == nil {
-					value = jsonStr
-				} else {
-					value = "<complex_expression>"
-				}
-			} else {
-				value = "<complex_expression>"
-			}
-		}
+	// Parse attributes using common function
+	for name, value := range parseBlockAttributes(block.Body) {
 		resource.Config[name] = value
 	}
 
-	// Parse nested blocks
-	nestedBlocks := make(map[string][]map[string]interface{})
-	for _, nestedBlock := range block.Body.Blocks {
-		blockType := nestedBlock.Type
-		
-		// Parse nested block content
-		blockContent := make(map[string]interface{})
-		
-		// Parse attributes in nested block
-		for name, attr := range nestedBlock.Body.Attributes {
-			value, err := evaluateExpression(attr.Expr)
-			if err != nil {
-				if val, diags := attr.Expr.Value(nil); !diags.HasErrors() {
-					jsonStr, err := convertCtyToJSON(val)
-					if err == nil {
-						value = jsonStr
-					} else {
-						value = "<complex_expression>"
-					}
-				} else {
-					value = "<complex_expression>"
-				}
-			}
-			blockContent[name] = value
-		}
-		
-		// Handle labels as identifiers for the block
-		if len(nestedBlock.Labels) > 0 {
-			blockContent["_labels"] = nestedBlock.Labels
-		}
-		
-		// Handle nested blocks within nested blocks (recursively)
-		if len(nestedBlock.Body.Blocks) > 0 {
-			innerBlocks := make(map[string][]map[string]interface{})
-			for _, innerBlock := range nestedBlock.Body.Blocks {
-				innerBlockType := innerBlock.Type
-				innerBlockContent := make(map[string]interface{})
-				
-				for name, attr := range innerBlock.Body.Attributes {
-					value, err := evaluateExpression(attr.Expr)
-					if err != nil {
-						if val, diags := attr.Expr.Value(nil); !diags.HasErrors() {
-							jsonStr, err := convertCtyToJSON(val)
-							if err == nil {
-								value = jsonStr
-							} else {
-								value = "<complex_expression>"
-							}
-						} else {
-							value = "<complex_expression>"
-						}
-					}
-					innerBlockContent[name] = value
-				}
-				
-				if len(innerBlock.Labels) > 0 {
-					innerBlockContent["_labels"] = innerBlock.Labels
-				}
-				
-				innerBlocks[innerBlockType] = append(innerBlocks[innerBlockType], innerBlockContent)
-			}
-			if len(innerBlocks) > 0 {
-				blockContent["_blocks"] = innerBlocks
-			}
-		}
-		
-		nestedBlocks[blockType] = append(nestedBlocks[blockType], blockContent)
-	}
-	
-	// Add nested blocks to config if any exist
-	if len(nestedBlocks) > 0 {
+	// Parse nested blocks using common function (maxDepth=2 for typical Terraform configs)
+	if nestedBlocks := parseNestedBlocks(block.Body, 2); nestedBlocks != nil {
 		resource.Config["_blocks"] = nestedBlocks
 	}
 
@@ -245,56 +216,13 @@ func parseDataBlock(block *hclsyntax.Block, def *ModuleDefinition, filename stri
 		Position: fmt.Sprintf("%s:%d", filepath.Base(filename), block.DefRange().Start.Line),
 	}
 
-	// Parse attributes
-	for name, attr := range block.Body.Attributes {
-		value, err := evaluateExpression(attr.Expr)
-		if err != nil {
-			if val, diags := attr.Expr.Value(nil); !diags.HasErrors() {
-				jsonStr, err := convertCtyToJSON(val)
-				if err == nil {
-					value = jsonStr
-				} else {
-					value = "<complex_expression>"
-				}
-			} else {
-				value = "<complex_expression>"
-			}
-		}
+	// Parse attributes using common function
+	for name, value := range parseBlockAttributes(block.Body) {
 		dataSource.Config[name] = value
 	}
 
-	// Parse nested blocks
-	nestedBlocks := make(map[string][]map[string]interface{})
-	for _, nestedBlock := range block.Body.Blocks {
-		blockType := nestedBlock.Type
-		
-		blockContent := make(map[string]interface{})
-		
-		for name, attr := range nestedBlock.Body.Attributes {
-			value, err := evaluateExpression(attr.Expr)
-			if err != nil {
-				if val, diags := attr.Expr.Value(nil); !diags.HasErrors() {
-					jsonStr, err := convertCtyToJSON(val)
-					if err == nil {
-						value = jsonStr
-					} else {
-						value = "<complex_expression>"
-					}
-				} else {
-					value = "<complex_expression>"
-				}
-			}
-			blockContent[name] = value
-		}
-		
-		if len(nestedBlock.Labels) > 0 {
-			blockContent["_labels"] = nestedBlock.Labels
-		}
-		
-		nestedBlocks[blockType] = append(nestedBlocks[blockType], blockContent)
-	}
-	
-	if len(nestedBlocks) > 0 {
+	// Parse nested blocks using common function (maxDepth=2 for typical Terraform configs)
+	if nestedBlocks := parseNestedBlocks(block.Body, 2); nestedBlocks != nil {
 		dataSource.Config["_blocks"] = nestedBlocks
 	}
 

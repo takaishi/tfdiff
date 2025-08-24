@@ -13,9 +13,27 @@ func writeTestFile(t *testing.T, filename, content string) {
 	}
 }
 
-// removeTestFile removes a temporary file
-func removeTestFile(filename string) {
-	os.Remove(filename)
+// setupTestFiles creates temporary directories and test files for comparison
+func setupTestFiles(t *testing.T, leftContent, rightContent string) (string, string) {
+	leftDir := t.TempDir()
+	rightDir := t.TempDir()
+	
+	leftFile := leftDir + "/main.tf"
+	rightFile := rightDir + "/main.tf"
+	
+	writeTestFile(t, leftFile, leftContent)
+	writeTestFile(t, rightFile, rightContent)
+	
+	return leftDir, rightDir
+}
+
+// assertBlocksType checks if blocks value is the expected type and returns it
+func assertBlocksType(t *testing.T, blocks interface{}) map[string][]map[string]interface{} {
+	blocksMap, ok := blocks.(map[string][]map[string]interface{})
+	if !ok {
+		t.Fatalf("Expected _blocks to be map[string][]map[string]interface{}, got %T", blocks)
+	}
+	return blocksMap
 }
 
 func TestNestedBlockParsing(t *testing.T) {
@@ -44,15 +62,8 @@ resource "aws_instance" "example" {
 }
 `
 
-	// Create temporary directories for each test
-	leftDir := t.TempDir()
-	rightDir := t.TempDir()
-	
-	leftFile := leftDir + "/main.tf"
-	rightFile := rightDir + "/main.tf"
-	
-	writeTestFile(t, leftFile, leftContent)
-	writeTestFile(t, rightFile, rightContent)
+	// Setup test files
+	leftDir, rightDir := setupTestFiles(t, leftContent, rightContent)
 
 	// Parse both files
 	leftDef, err := ParseModuleHCL(leftDir)
@@ -81,10 +92,7 @@ resource "aws_instance" "example" {
 		t.Fatalf("Expected _blocks key in config, but not found")
 	}
 
-	blocksMap, ok := blocks.(map[string][]map[string]interface{})
-	if !ok {
-		t.Fatalf("Expected _blocks to be map[string][]map[string]interface{}, got %T", blocks)
-	}
+	blocksMap := assertBlocksType(t, blocks)
 
 	metadataOptions, ok := blocksMap["metadata_options"]
 	if !ok {
@@ -163,15 +171,8 @@ resource "aws_security_group" "example" {
 }
 `
 
-	// Create temporary directories for each test
-	leftDir := t.TempDir()
-	rightDir := t.TempDir()
-	
-	leftFile := leftDir + "/main.tf"
-	rightFile := rightDir + "/main.tf"
-	
-	writeTestFile(t, leftFile, leftContent)
-	writeTestFile(t, rightFile, rightContent)
+	// Setup test files
+	leftDir, rightDir := setupTestFiles(t, leftContent, rightContent)
 
 	// Parse both files
 	leftDef, err := ParseModuleHCL(leftDir)
@@ -205,10 +206,7 @@ resource "aws_security_group" "example" {
 		t.Fatalf("Expected _blocks key in config, but not found")
 	}
 
-	blocksMap, ok := blocks.(map[string][]map[string]interface{})
-	if !ok {
-		t.Fatalf("Expected _blocks to be map[string][]map[string]interface{}, got %T", blocks)
-	}
+	blocksMap := assertBlocksType(t, blocks)
 
 	// Check that both ingress and egress blocks exist
 	ingress, hasIngress := blocksMap["ingress"]
@@ -255,15 +253,8 @@ resource "aws_instance" "example" {
 }
 `
 
-	// Create temporary directories for each test
-	leftDir := t.TempDir()
-	rightDir := t.TempDir()
-	
-	leftFile := leftDir + "/main.tf"
-	rightFile := rightDir + "/main.tf"
-	
-	writeTestFile(t, leftFile, leftContent)
-	writeTestFile(t, rightFile, rightContent)
+	// Setup test files
+	leftDir, rightDir := setupTestFiles(t, leftContent, rightContent)
 
 	// Parse both files
 	leftDef, err := ParseModuleHCL(leftDir)

@@ -36,6 +36,12 @@ func colorize(text, color string, noColor bool) string {
 	return color + text + ColorReset
 }
 
+// isDisplayableValue checks if a value should be displayed in output
+// Returns false for empty strings, complex expressions, or values with angle brackets
+func isDisplayableValue(value string) bool {
+	return value != "" && value != "<complex_expression>" && !strings.HasPrefix(value, "<")
+}
+
 // FormatTextOutput formats the comparison result in a unified diff format
 func FormatTextOutput(result *ComparisonResult, config ComparisonConfig, noColor bool) string {
 	return FormatDiffOutput(result, config, noColor)
@@ -136,7 +142,7 @@ func formatDiffLine(diff Diff, item interface{}, config ComparisonConfig) string
 			lines := []string{fmt.Sprintf("resource \"%s\" \"%s\" {", res.Type, res.Name)}
 			if !config.IgnoreArguments && len(res.Config) > 0 {
 				for key, value := range res.Config {
-					if strValue, ok := value.(string); ok && strValue != "" && strValue != "<complex_expression>" && !strings.HasPrefix(strValue, "<") {
+					if strValue, ok := value.(string); ok && isDisplayableValue(strValue) {
 						lines = append(lines, fmt.Sprintf("  %s = \"%s\"", key, strValue))
 					}
 				}
@@ -149,7 +155,7 @@ func formatDiffLine(diff Diff, item interface{}, config ComparisonConfig) string
 			lines := []string{fmt.Sprintf("data \"%s\" \"%s\" {", ds.Type, ds.Name)}
 			if !config.IgnoreArguments && len(ds.Config) > 0 {
 				for key, value := range ds.Config {
-					if strValue, ok := value.(string); ok && strValue != "" && strValue != "<complex_expression>" && !strings.HasPrefix(strValue, "<") {
+					if strValue, ok := value.(string); ok && isDisplayableValue(strValue) {
 						lines = append(lines, fmt.Sprintf("  %s = \"%s\"", key, strValue))
 					}
 				}
@@ -341,16 +347,15 @@ func compareInterfaceMapAttributes(before, after map[string]interface{}) []strin
 		}
 		
 		if !beforeExists && afterExists {
-			if afterStr != "" && afterStr != "<complex_expression>" && !strings.HasPrefix(afterStr, "<") {
+			if isDisplayableValue(afterStr) {
 				lines = append(lines, fmt.Sprintf("  + %s = \"%s\"", key, afterStr))
 			}
 		} else if beforeExists && !afterExists {
-			if beforeStr != "" && beforeStr != "<complex_expression>" && !strings.HasPrefix(beforeStr, "<") {
+			if isDisplayableValue(beforeStr) {
 				lines = append(lines, fmt.Sprintf("  - %s = \"%s\"", key, beforeStr))
 			}
 		} else if beforeExists && afterExists && beforeStr != afterStr {
-			if (beforeStr != "" && beforeStr != "<complex_expression>" && !strings.HasPrefix(beforeStr, "<")) ||
-			   (afterStr != "" && afterStr != "<complex_expression>" && !strings.HasPrefix(afterStr, "<")) {
+			if isDisplayableValue(beforeStr) || isDisplayableValue(afterStr) {
 				lines = append(lines, fmt.Sprintf("  - %s = \"%s\"", key, beforeStr))
 				lines = append(lines, fmt.Sprintf("  + %s = \"%s\"", key, afterStr))
 			}
@@ -489,7 +494,7 @@ func formatNestedBlockDiff(blockType string, block map[string]interface{}, prefi
 	for _, key := range keys {
 		value := block[key]
 		valueStr := interfaceToDisplayString(value)
-		if valueStr != "" && valueStr != "<complex_expression>" {
+		if isDisplayableValue(valueStr) {
 			lines = append(lines, fmt.Sprintf("%s   %s = \"%s\"", prefix, key, valueStr))
 		}
 	}
