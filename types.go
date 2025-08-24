@@ -20,18 +20,18 @@ type Output struct {
 
 // Resource represents a Terraform resource
 type Resource struct {
-	Type      string            `json:"type"`
-	Name      string            `json:"name"`
-	Config    map[string]string `json:"config,omitempty"`
-	Position  string            `json:"position,omitempty"`
+	Type      string                 `json:"type"`
+	Name      string                 `json:"name"`
+	Config    map[string]interface{} `json:"config,omitempty"`
+	Position  string                 `json:"position,omitempty"`
 }
 
 // DataSource represents a Terraform data source
 type DataSource struct {
-	Type     string            `json:"type"`
-	Name     string            `json:"name"`
-	Config   map[string]string `json:"config,omitempty"`
-	Position string            `json:"position,omitempty"`
+	Type     string                 `json:"type"`
+	Name     string                 `json:"name"`
+	Config   map[string]interface{} `json:"config,omitempty"`
+	Position string                 `json:"position,omitempty"`
 }
 
 // Variable represents a Terraform variable
