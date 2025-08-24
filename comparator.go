@@ -537,11 +537,21 @@ func dataSourcesEqual(left, right DataSource, config ComparisonConfig) bool {
 }
 
 func variablesEqual(left, right Variable) bool {
-	if left.Name != right.Name || left.Type != right.Type || left.DefaultValue != right.DefaultValue || left.Description != right.Description {
+	if left.Name != right.Name || left.Type != right.Type || left.Description != right.Description {
 		return false
 	}
 
-	return true
+	// Handle DefaultValue comparison
+	leftVal := left.DefaultValue
+	rightVal := right.DefaultValue
+
+	// If both are JSON strings, parse and compare structurally
+	if isJSON(leftVal) && isJSON(rightVal) {
+		return jsonEqual(leftVal, rightVal)
+	}
+
+	// Otherwise, use simple string comparison
+	return leftVal == rightVal
 }
 
 // containsLevel checks if a slice of ComparisonLevel contains a specific level
