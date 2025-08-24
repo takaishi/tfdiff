@@ -273,18 +273,32 @@ func parseVariableBlock(block *hclsyntax.Block, def *ModuleDefinition, filename 
 
 	// Parse attributes
 	for name, attr := range block.Body.Attributes {
-		value, err := evaluateExpression(attr.Expr)
-		if err != nil {
-			value = "<complex_expression>"
-		}
-
 		switch name {
 		case "type":
+			value, err := evaluateExpression(attr.Expr)
+			if err != nil {
+				value = "<complex_expression>"
+			}
 			variable.Type = value
 		case "description":
+			value, err := evaluateExpression(attr.Expr)
+			if err != nil {
+				value = "<complex_expression>"
+			}
 			variable.Description = value
 		case "default":
-			variable.DefaultValue = value
+			// Use evaluateAttributeValue for complex values like arrays
+			value := evaluateAttributeValue(attr)
+			if str, ok := value.(string); ok {
+				variable.DefaultValue = str
+			} else {
+				// Convert complex values to JSON string for storage
+				if jsonBytes, err := json.Marshal(value); err == nil {
+					variable.DefaultValue = string(jsonBytes)
+				} else {
+					variable.DefaultValue = "<complex_expression>"
+				}
+			}
 		}
 	}
 

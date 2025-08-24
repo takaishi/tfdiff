@@ -79,6 +79,7 @@ func DefaultComparisonConfig() ComparisonConfig {
 			ComparisonLevelOutputs,
 			ComparisonLevelResources,
 			ComparisonLevelDataSources,
+			ComparisonLevelVariables,
 		},
 		IgnoreArguments: true,
 	}
