@@ -56,7 +56,7 @@ func TestValidateModuleDirectory(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			path := tt.setup(t)
 			err := ValidateModuleDirectory(path)
-			
+
 			if tt.wantErr {
 				if err == nil {
 					t.Errorf("expected error but got none")
@@ -89,7 +89,7 @@ func TestFindTerraformFiles(t *testing.T) {
 			name: "directory with multiple terraform files",
 			setup: func(t *testing.T) string {
 				tmpDir := t.TempDir()
-				
+
 				// Create multiple .tf files
 				files := []string{"main.tf", "variables.tf", "outputs.tf"}
 				for _, file := range files {
@@ -99,7 +99,7 @@ func TestFindTerraformFiles(t *testing.T) {
 						t.Fatalf("failed to create %s: %v", file, err)
 					}
 				}
-				
+
 				return tmpDir
 			},
 			expectedMin: 3,
@@ -122,16 +122,16 @@ func TestFindTerraformFiles(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			dir := tt.setup(t)
 			files, err := FindTerraformFiles(dir)
-			
+
 			if err != nil {
 				t.Errorf("unexpected error: %v", err)
 				return
 			}
-			
+
 			if len(files) < tt.expectedMin {
 				t.Errorf("expected at least %d files, got %d", tt.expectedMin, len(files))
 			}
-			
+
 			// Verify all returned files have .tf extension
 			for _, file := range files {
 				if filepath.Ext(file) != ".tf" {
@@ -235,28 +235,28 @@ variable "instance_type" {
 		t.Run(tt.name, func(t *testing.T) {
 			dir := tt.setup(t)
 			module, err := ParseModule(dir)
-			
+
 			if tt.wantErr {
 				if err == nil {
 					t.Errorf("expected error but got none")
 				}
 				return
 			}
-			
+
 			if err != nil {
 				t.Errorf("unexpected error: %v", err)
 				return
 			}
-			
+
 			if module == nil {
 				t.Errorf("expected module but got nil")
 				return
 			}
-			
+
 			if module.Path != dir {
 				t.Errorf("expected path %s, got %s", dir, module.Path)
 			}
-			
+
 			if tt.check != nil {
 				tt.check(t, module)
 			}
@@ -266,7 +266,7 @@ variable "instance_type" {
 
 func TestParseHCLResourceWithTags(t *testing.T) {
 	tmpDir := t.TempDir()
-	
+
 	// Create test Terraform file
 	tfContent := `
 resource "aws_instance" "test" {
@@ -283,28 +283,28 @@ resource "aws_instance" "test" {
 	if err := os.WriteFile(filepath.Join(tmpDir, "main.tf"), []byte(tfContent), 0644); err != nil {
 		t.Fatal(err)
 	}
-	
+
 	// Execute parsing
 	module, err := ParseModuleHCL(tmpDir)
 	if err != nil {
 		t.Fatalf("Failed to parse module: %v", err)
 	}
-	
+
 	// Verify there is 1 resource
 	if len(module.Resources) != 1 {
 		t.Fatalf("Expected 1 resource, got %d", len(module.Resources))
 	}
-	
+
 	resource := module.Resources[0]
-	
+
 	// Verify tags are stored as JSON
 	tagsValue, exists := resource.Config["tags"]
 	if !exists {
 		t.Fatal("tags not found in resource config")
 	}
-	
+
 	t.Logf("Tags value: %s", tagsValue)
-	
+
 	// Verify it can be parsed as JSON
 	var tags map[string]interface{}
 	tagsStr, ok := tagsValue.(string)
@@ -330,5 +330,69 @@ resource "aws_instance" "test" {
 		if tags["Team"] != "backend" {
 			t.Errorf("Expected Team=backend, got %v", tags["Team"])
 		}
+	}
+}
+
+func TestParseModuleHCLWithOptions_IgnorePatterns(t *testing.T) {
+	baseDir := t.TempDir()
+	moduleDir := filepath.Join(baseDir, "module")
+	if err := os.MkdirAll(moduleDir, 0755); err != nil {
+		t.Fatalf("failed to create module directory: %v", err)
+	}
+
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get cwd: %v", err)
+	}
+	if err := os.Chdir(baseDir); err != nil {
+		t.Fatalf("failed to chdir: %v", err)
+	}
+	defer func() {
+		if err := os.Chdir(cwd); err != nil {
+			t.Fatalf("failed to restore cwd: %v", err)
+		}
+	}()
+
+	mainContent := `
+resource "aws_instance" "main" {
+  ami           = "ami-12345"
+  instance_type = "t2.micro"
+}
+`
+	ignoredContent := `
+resource "aws_instance" "ignored" {
+  ami           = "ami-67890"
+  instance_type = "t2.small"
+}
+`
+	skipContent := `
+resource "aws_instance" "skip" {
+  ami           = "ami-00000"
+  instance_type = "t2.nano"
+}
+`
+
+	if err := os.WriteFile(filepath.Join(moduleDir, "main.tf"), []byte(mainContent), 0644); err != nil {
+		t.Fatalf("failed to create main.tf: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(moduleDir, "ignored.tf"), []byte(ignoredContent), 0644); err != nil {
+		t.Fatalf("failed to create ignored.tf: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(moduleDir, "skip.tf"), []byte(skipContent), 0644); err != nil {
+		t.Fatalf("failed to create skip.tf: %v", err)
+	}
+
+	module, err := ParseModuleHCLWithOptions(moduleDir, ParseOptions{
+		IgnoreFiles: []string{"module/skip.tf", "module/ignored.tf"},
+	})
+	if err != nil {
+		t.Fatalf("failed to parse module: %v", err)
+	}
+
+	if len(module.Resources) != 1 {
+		t.Fatalf("expected 1 resource, got %d", len(module.Resources))
+	}
+	if module.Resources[0].Name != "main" {
+		t.Fatalf("expected resource name main, got %s", module.Resources[0].Name)
 	}
 }

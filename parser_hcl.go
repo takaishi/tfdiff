@@ -14,6 +14,11 @@ import (
 
 // ParseModuleHCL parses a Terraform module directory using HCL parser directly
 func ParseModuleHCL(modulePath string) (*ModuleDefinition, error) {
+	return ParseModuleHCLWithOptions(modulePath, ParseOptions{})
+}
+
+// ParseModuleHCLWithOptions parses a Terraform module directory using HCL parser directly and options.
+func ParseModuleHCLWithOptions(modulePath string, options ParseOptions) (*ModuleDefinition, error) {
 	// Check if directory exists
 	if _, err := os.Stat(modulePath); os.IsNotExist(err) {
 		return nil, fmt.Errorf("directory does not exist: %s", modulePath)
@@ -29,6 +34,51 @@ func ParseModuleHCL(modulePath string) (*ModuleDefinition, error) {
 
 	def := &ModuleDefinition{
 		Path: modulePath,
+	}
+
+	patterns := loadIgnorePatterns(options.IgnoreFiles)
+
+	if len(patterns) > 0 && len(files) > 0 {
+		cwd, err := os.Getwd()
+		if err != nil {
+			cwd = ""
+		}
+		cwdEval := ""
+		if cwd != "" {
+			if eval, err := filepath.EvalSymlinks(cwd); err == nil {
+				cwdEval = eval
+			}
+		}
+		filtered := make([]string, 0, len(files))
+		for _, file := range files {
+			rel := file
+			if cwd != "" {
+				if relPath, err := filepath.Rel(cwd, file); err == nil {
+					rel = relPath
+				}
+			}
+			ignored, err := shouldIgnore(rel, filepath.Base(file), patterns)
+			if err != nil {
+				return nil, fmt.Errorf("invalid ignore pattern: %w", err)
+			}
+			if !ignored && cwdEval != "" {
+				fileEval := file
+				if eval, err := filepath.EvalSymlinks(file); err == nil {
+					fileEval = eval
+				}
+				if relAlt, err := filepath.Rel(cwdEval, fileEval); err == nil && relAlt != rel {
+					ignored, err = shouldIgnore(relAlt, filepath.Base(file), patterns)
+					if err != nil {
+						return nil, fmt.Errorf("invalid ignore pattern: %w", err)
+					}
+				}
+			}
+			if ignored {
+				continue
+			}
+			filtered = append(filtered, file)
+		}
+		files = filtered
 	}
 
 	// If no .tf files found, return empty module definition
@@ -142,12 +192,12 @@ func evaluateAttributeValue(attr *hclsyntax.Attribute) interface{} {
 // parseBlockAttributes parses attributes from an HCL block body
 func parseBlockAttributes(body *hclsyntax.Body) map[string]interface{} {
 	config := make(map[string]interface{})
-	
+
 	// Parse attributes
 	for name, attr := range body.Attributes {
 		config[name] = evaluateAttributeValue(attr)
 	}
-	
+
 	return config
 }
 
@@ -156,25 +206,25 @@ func parseNestedBlocks(body *hclsyntax.Body, maxDepth int) map[string][]map[stri
 	if maxDepth <= 0 || len(body.Blocks) == 0 {
 		return nil
 	}
-	
+
 	nestedBlocks := make(map[string][]map[string]interface{})
-	
+
 	for _, nestedBlock := range body.Blocks {
 		blockContent := parseBlockAttributes(nestedBlock.Body)
-		
+
 		// Handle labels as identifiers for the block
 		if len(nestedBlock.Labels) > 0 {
 			blockContent["_labels"] = nestedBlock.Labels
 		}
-		
+
 		// Handle nested blocks within nested blocks (recursively)
 		if innerBlocks := parseNestedBlocks(nestedBlock.Body, maxDepth-1); innerBlocks != nil {
 			blockContent["_blocks"] = innerBlocks
 		}
-		
+
 		nestedBlocks[nestedBlock.Type] = append(nestedBlocks[nestedBlock.Type], blockContent)
 	}
-	
+
 	return nestedBlocks
 }
 

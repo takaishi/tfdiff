@@ -57,6 +57,15 @@ tfdiff module1 module2 -o json
 tfdiff module1 module2 --ignore-args=false
 ```
 
+### Ignore Files
+
+You can ignore specific Terraform files by passing `--ignore-files` flags (repeatable). Patterns are matched against paths relative to the execution directory.
+
+```bash
+# Ignore files by pattern (repeatable)
+tfdiff module1 module2 --ignore-files "generated.tf" --ignore-files "test_*.tf"
+```
+
 ## Example Output
 
 Unified diff format showing attribute-level changes:
