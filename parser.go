@@ -11,6 +11,11 @@ func ParseModule(modulePath string) (*ModuleDefinition, error) {
 	return ParseModuleHCL(modulePath)
 }
 
+// ParseModuleWithOptions parses a Terraform module directory using options.
+func ParseModuleWithOptions(modulePath string, options ParseOptions) (*ModuleDefinition, error) {
+	return ParseModuleHCLWithOptions(modulePath, options)
+}
+
 // FindTerraformFiles finds all .tf files in the specified directory
 func FindTerraformFiles(path string) ([]string, error) {
 	files, err := filepath.Glob(filepath.Join(path, "*.tf"))

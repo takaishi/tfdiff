@@ -14,13 +14,14 @@ type GlobalOptions struct {
 }
 
 type CLI struct {
-	Version       VersionFlag  `name:"version" help:"show version"`
-	LeftDir       string       `arg:"" name:"left" help:"path to left Terraform module directory"`
-	RightDir      string       `arg:"" name:"right" help:"path to right Terraform module directory"`
-	Levels        []string     `short:"l" name:"level" help:"comparison levels: module_calls, outputs, resources, data_sources, variables, all" default:"module_calls,outputs,resources,data_sources"`
-	IgnoreArgs    bool         `name:"ignore-args" help:"ignore argument differences" default:"false"`
-	OutputFormat  string       `short:"o" name:"output" help:"output format: text, json" default:"text"`
-	NoColor       bool         `name:"no-color" help:"disable colored output"`
+	Version      VersionFlag `name:"version" help:"show version"`
+	LeftDir      string      `arg:"" name:"left" help:"path to left Terraform module directory"`
+	RightDir     string      `arg:"" name:"right" help:"path to right Terraform module directory"`
+	Levels       []string    `short:"l" name:"level" help:"comparison levels: module_calls, outputs, resources, data_sources, variables, all" default:"module_calls,outputs,resources,data_sources"`
+	IgnoreArgs   bool        `name:"ignore-args" help:"ignore argument differences" default:"false"`
+	IgnoreFiles  []string    `short:"i" name:"ignore-files" help:"ignore file patterns (repeatable)"`
+	OutputFormat string      `short:"o" name:"output" help:"output format: text, json" default:"text"`
+	NoColor      bool        `name:"no-color" help:"disable colored output"`
 }
 
 type VersionFlag string
