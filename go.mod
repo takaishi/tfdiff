@@ -5,7 +5,7 @@ go 1.23.0
 toolchain go1.24.5
 
 require (
-	github.com/alecthomas/kong v0.9.0
+	github.com/alecthomas/kong v1.14.0
 	github.com/hashicorp/hcl/v2 v2.24.0
 	github.com/zclconf/go-cty v1.16.3
 )
