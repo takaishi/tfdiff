@@ -2,7 +2,7 @@ module github.com/takaishi/tfdiff
 
 go 1.23.0
 
-toolchain go1.24.5
+toolchain go1.26.2
 
 require (
 	github.com/alecthomas/kong v0.9.0
